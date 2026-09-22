@@ -12,6 +12,7 @@
   --bg:#F1F4EF; --surface:#FFFFFF; --ink:#17302B; --muted:#5B6C66; --line:#DCE3DB;
   --good:#1D7A52; --good-bg:#E3F1E9; --bad:#B3243A; --bad-bg:#F8E4E7; --focus:#3F72AF;
   --comida:#D9A21B; --transporte:#3F72AF; --servicios:#8B6BB1; --compras:#C4587A;
+  --mantenimiento:#3F8F6D; --seguros:#4F5D75; --clases:#C76B3D; --otros:#8A8578;
   --display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
   --body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
@@ -70,13 +71,16 @@ h1{font:700 1.6rem/1.1 var(--display);letter-spacing:-.01em}
 @media (max-width:860px){.cols{grid-template-columns:1fr}.cats{order:-1}}
 
 /* Categorías */
-.cat-list{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.cat-list{list-style:none;margin:0;padding:0;display:grid;gap:16px}
 .cat-row{display:grid;gap:6px}
 .cat-head{display:flex;justify-content:space-between;gap:8px;font-weight:600}
 .cat-head span:first-child{display:flex;align-items:center;gap:8px}
 .dot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
 .track{height:6px;border-radius:4px;background:#E9EEE8;overflow:hidden}
 .track b{display:block;height:100%;border-radius:4px}
+.track.over b{background:var(--bad)!important}
+.cat-status{font-size:.82rem;color:var(--muted)}
+.cat-status.good{color:var(--good)} .cat-status.bad{color:var(--bad)}
 .sub-list{list-style:none;margin:2px 0 0;padding:0 0 0 18px;display:grid;gap:8px;border-left:2px solid var(--line)}
 .sub-row{display:grid;gap:4px;font-size:.9rem}
 .sub-row div:first-child{display:flex;justify-content:space-between;color:var(--muted)}
@@ -136,7 +140,7 @@ tr.future td{color:var(--muted)}
 .toast.show{opacity:1}
 
 /* Diálogos */
-dialog{border:0;border-radius:20px;padding:24px;width:calc(100% - 32px);max-width:460px;color:var(--ink);background:var(--surface);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog{border:0;border-radius:20px;padding:24px;width:calc(100% - 32px);max-width:460px;color:var(--ink);background:var(--surface);box-shadow:0 20px 60px rgba(0,0,0,.25);max-height:calc(100vh - 48px);overflow-y:auto}
 dialog::backdrop{background:rgba(23,48,43,.5)}
 dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 .field{display:grid;gap:6px;margin-bottom:14px;border:0;padding:0;min-width:0}
@@ -153,8 +157,12 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 .dlg-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
 .who-list{display:grid;gap:10px;margin-top:6px}
 .who-list .btn-ghost{padding:14px;font-size:1rem;font-weight:600}
+.cat-limits{display:grid;gap:10px}
+.cat-limit-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center}
+.cat-limit-row label{display:flex;align-items:center;gap:8px;font-weight:500;font-size:.92rem}
+.cat-limit-row input{width:100%;font:inherit;padding:8px 10px;border:1px solid #BFCBC3;border-radius:8px;background:#fff;color:var(--ink)}
 
-@media (max-width:520px){.hero{padding:20px 18px 16px}.fab{left:16px;right:16px;text-align:center}}
+@media (max-width:520px){.hero{padding:20px 18px 16px}.fab{left:16px;right:16px;text-align:center}.cat-limit-row{grid-template-columns:1fr 96px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -212,6 +220,10 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
         <label class="opt"><input type="radio" name="category" value="transporte"><span>Transporte</span></label>
         <label class="opt"><input type="radio" name="category" value="servicios"><span>Servicios</span></label>
         <label class="opt"><input type="radio" name="category" value="compras"><span>Compras</span></label>
+        <label class="opt"><input type="radio" name="category" value="mantenimiento"><span>Mantenimiento</span></label>
+        <label class="opt"><input type="radio" name="category" value="seguros"><span>Seguros</span></label>
+        <label class="opt"><input type="radio" name="category" value="clases"><span>Clases</span></label>
+        <label class="opt"><input type="radio" name="category" value="otros"><span>Otros</span></label>
       </div>
     </fieldset>
     <fieldset class="field" id="personField" hidden>
@@ -232,16 +244,21 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 
 <!-- Límite mensual -->
 <dialog id="dlgLimit" aria-labelledby="dlgLimitTitle">
-  <h2 id="dlgLimitTitle">Límite mensual</h2>
+  <h2 id="dlgLimitTitle">Límites del mes</h2>
   <form id="formLimit">
     <div class="field">
-      <label for="lAmount">Límite (₡)</label>
+      <label for="lAmount">Límite total (₡)</label>
       <input id="lAmount" type="number" name="limit" min="1" step="any" inputmode="decimal" required>
       <p id="limitHint" class="hint"></p>
     </div>
+    <fieldset class="field">
+      <legend>Límite por categoría (opcional)</legend>
+      <p class="hint" style="margin:-2px 0 8px">Déjalo en blanco en las que no quieras vigilar por separado.</p>
+      <div id="catLimits" class="cat-limits"></div>
+    </fieldset>
     <div class="dlg-actions">
       <button type="button" class="btn-ghost" data-act="close">Cancelar</button>
-      <button type="submit" class="btn">Guardar límite</button>
+      <button type="submit" class="btn">Guardar límites</button>
     </div>
   </form>
 </dialog>
@@ -268,6 +285,11 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 </dialog>
 
 <script type="module">
+/* =====================================================================
+   CONFIGURACIÓN
+   Configuración del proyecto Firebase compartido (presupuesto-china),
+   usando las colecciones "hogar_gastos" y "hogar_ajustes".
+   ===================================================================== */
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBefF9NGoQdtbihppLhwzZIeFmg4WTdE0M",
   authDomain: "presupuesto-china.firebaseapp.com",
@@ -279,10 +301,14 @@ const FIREBASE_CONFIG = {
 
 const USERS = ['Sofi', 'Mamá', 'Papá'];
 const CATS = [
-  { id: 'comida',     name: 'Comida' },
-  { id: 'transporte', name: 'Transporte' },
-  { id: 'servicios',  name: 'Servicios' },
-  { id: 'compras',    name: 'Compras' }
+  { id: 'comida',        name: 'Comida' },
+  { id: 'transporte',    name: 'Transporte' },
+  { id: 'servicios',     name: 'Servicios' },
+  { id: 'compras',       name: 'Compras' },
+  { id: 'mantenimiento', name: 'Mantenimiento' },
+  { id: 'seguros',       name: 'Seguros' },
+  { id: 'clases',        name: 'Clases' },
+  { id: 'otros',         name: 'Otros' }
 ];
 const CAT_NAME = Object.fromEntries(CATS.map(c => [c.id, c.name]));
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -305,6 +331,14 @@ const phaseOf = ym => { const n = todayYM(); return ym < n ? 'past' : ym === n ?
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(16).slice(2));
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } };
+
+/* Un límite guardado puede ser el formato viejo (un número = límite total)
+   o el nuevo ({ total, cat: {catId: valor} }). normLimit homogeniza ambos. */
+const normLimit = raw => {
+  if (raw == null) return { total: undefined, cat: {} };
+  if (typeof raw === 'number') return { total: raw, cat: {} };
+  return { total: raw.total, cat: raw.cat || {} };
+};
 
 /* ---------- Estado ---------- */
 const S = {
@@ -330,7 +364,14 @@ function localStore(onData) {
     add: async x => { d.expenses.push({ id: uid(), ...x }); save(); },
     update: async (id, x) => { const i = d.expenses.findIndex(e => e.id === id); if (i > -1) d.expenses[i] = { ...d.expenses[i], ...x }; save(); },
     remove: async id => { d.expenses = d.expenses.filter(e => e.id !== id); save(); },
-    setLimit: async (ym, v) => { d.limits[ym] = v; save(); }
+    setLimit: async (ym, v) => { const cur = normLimit(d.limits[ym]); d.limits[ym] = { total: v, cat: cur.cat }; save(); },
+    setCatLimit: async (ym, catId, v) => {
+      const cur = normLimit(d.limits[ym]);
+      const cat = { ...cur.cat };
+      if (v == null) delete cat[catId]; else cat[catId] = v;
+      d.limits[ym] = { total: cur.total, cat };
+      save();
+    }
   };
 }
 
@@ -360,7 +401,10 @@ async function firebaseStore(onData) {
     add: d => fsM.addDoc(col, d),
     update: (id, d) => fsM.setDoc(fsM.doc(db, 'hogar_gastos', id), d, { merge: true }),
     remove: id => fsM.deleteDoc(fsM.doc(db, 'hogar_gastos', id)),
-    setLimit: (ym, v) => fsM.setDoc(limRef, { limits: { [ym]: v } }, { merge: true })
+    setLimit: (ym, v) => fsM.setDoc(limRef, { limits: { [ym]: { total: v } } }, { merge: true }),
+    setCatLimit: (ym, catId, v) => fsM.setDoc(limRef, {
+      limits: { [ym]: { cat: { [catId]: v == null ? fsM.deleteField() : v } } }
+    }, { merge: true })
   };
 }
 
@@ -395,7 +439,7 @@ function byMonth(ym) { return S.expenses.filter(e => e.date && e.date.slice(0, 7
 
 function totals(ym) {
   const list = byMonth(ym);
-  const cat = { comida: 0, transporte: 0, servicios: 0, compras: 0 };
+  const cat = Object.fromEntries(CATS.map(c => [c.id, 0]));
   const per = Object.fromEntries(USERS.map(u => [u, 0]));
   let total = 0;
   for (const e of list) {
@@ -407,12 +451,22 @@ function totals(ym) {
   return { list, cat, per, total };
 }
 
-function limitFor(ym) {
-  if (ym in S.limits) return { value: +S.limits[ym], inherited: false };
+/* Busca un valor de límite (total o de una categoría) para ym; si ese mes
+   no lo definió, hereda el más reciente definido en un mes anterior. */
+function findLimit(ym, getter) {
+  if (ym in S.limits) {
+    const v = getter(normLimit(S.limits[ym]));
+    if (v != null) return { value: +v, inherited: false };
+  }
   const keys = Object.keys(S.limits).filter(k => k < ym).sort();
-  if (keys.length) return { value: +S.limits[keys[keys.length - 1]], inherited: true };
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const v = getter(normLimit(S.limits[keys[i]]));
+    if (v != null) return { value: +v, inherited: true };
+  }
   return null;
 }
+const limitFor = ym => findLimit(ym, l => l.total);
+const catLimitFor = (ym, catId) => findLimit(ym, l => l.cat[catId]);
 
 /* ---------- Iconos ---------- */
 const ICON_EDIT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
@@ -491,7 +545,7 @@ function renderHero(t, L, phase) {
         <p class="hero-label">${label}</p>
         <p class="hero-big ${over ? 'bad' : 'good'}">${fmtMoney(Math.abs(diff))}</p>
       </div>
-      <button class="btn-ghost" data-act="limit">Editar límite</button>
+      <button class="btn-ghost" data-act="limit">Editar límites</button>
     </div>
     <div class="gauge-wrap">
       <div class="gauge" role="img" aria-label="Gastado ${fmtMoney(t.total)} de un límite de ${fmtMoney(L.value)}">${segs}</div>${mark}
@@ -505,20 +559,28 @@ function renderHero(t, L, phase) {
 }
 
 function renderCats(t) {
-  const max = Math.max(t.total, 1);
+  const relMax = Math.max(t.total, 1);
   const rows = CATS.map(c => {
     const v = t.cat[c.id];
+    const L = catLimitFor(S.ym, c.id);
+    const width = L ? Math.min(v / L.value * 100, 100) : (v / relMax * 100);
+    const over = L && v > L.value;
+    const status = !L ? '' : (over
+      ? `<p class="cat-status bad">Sobrepasa ${fmtMoney(v - L.value)} del límite de ${fmtMoney(L.value)}</p>`
+      : `<p class="cat-status good">Ahorra ${fmtMoney(L.value - v)} del límite de ${fmtMoney(L.value)}</p>`);
     let sub = '';
     if (c.id === 'compras') {
+      const maxP = Math.max(...USERS.map(u => t.per[u]), 1);
       sub = `<ul class="sub-list">${USERS.map(u => `
         <li class="sub-row">
           <div><span>${u}</span><strong>${fmtMoney(t.per[u])}</strong></div>
-          <div class="track"><b style="width:${t.per[u] / max * 100}%;background:var(--compras)"></b></div>
+          <div class="track"><b style="width:${t.per[u] / maxP * 100}%;background:var(--compras)"></b></div>
         </li>`).join('')}</ul>`;
     }
     return `<li class="cat-row">
       <div class="cat-head"><span><i class="dot" style="background:var(--${c.id})"></i>${c.name}</span><span>${fmtMoney(v)}</span></div>
-      <div class="track"><b style="width:${v / max * 100}%;background:var(--${c.id})"></b></div>
+      <div class="track${over ? ' over' : ''}"><b style="width:${width}%;background:var(--${c.id})"></b></div>
+      ${status}
       ${sub}
     </li>`;
   }).join('');
@@ -760,7 +822,14 @@ async function saveExpense(ev) {
 function openLimit() {
   const L = limitFor(S.ym);
   $('#lAmount').value = L ? L.value : '';
-  $('#limitHint').textContent = `Aplica desde ${monthName(S.ym)} en adelante, hasta que definas otro límite. Los meses anteriores conservan el suyo.`;
+  $('#limitHint').textContent = `El total aplica desde ${monthName(S.ym)} en adelante, hasta que definas otro. Los meses anteriores conservan el suyo.`;
+  $('#catLimits').innerHTML = CATS.map(c => {
+    const cl = catLimitFor(S.ym, c.id);
+    return `<div class="cat-limit-row">
+      <label for="cl_${c.id}"><i class="dot" style="background:var(--${c.id})"></i>${c.name}</label>
+      <input id="cl_${c.id}" type="number" min="1" step="any" inputmode="decimal" data-cat="${c.id}" value="${cl ? cl.value : ''}">
+    </div>`;
+  }).join('');
   $('#dlgLimit').showModal();
 }
 
@@ -770,8 +839,16 @@ async function saveLimit(ev) {
   if (!(v > 0)) return;
   try {
     await store.setLimit(S.ym, v);
+    const inputs = document.querySelectorAll('#catLimits input[data-cat]');
+    for (const inp of inputs) {
+      const raw = inp.value.trim();
+      const catId = inp.dataset.cat;
+      if (raw === '') { await store.setCatLimit(S.ym, catId, null); continue; }
+      const cv = parseFloat(raw);
+      if (cv > 0) await store.setCatLimit(S.ym, catId, cv);
+    }
     $('#dlgLimit').close();
-    toast('Límite guardado');
+    toast('Límites guardados');
   } catch (err) {
     console.error(err);
     toast('No se pudo guardar el límite');
