@@ -268,21 +268,14 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 </dialog>
 
 <script type="module">
-/* =====================================================================
-   CONFIGURACIÓN
-   Para compartir el presupuesto entre varios dispositivos, pega aquí el
-   objeto firebaseConfig de tu proyecto (Firebase > Configuración del
-   proyecto > Tus apps > Web). Deja null para usar solo este navegador.
-   Usa las colecciones "hogar_gastos" y "hogar_ajustes" de Firestore.
-   No necesita Firebase Storage.
-   ===================================================================== */
-const FIREBASE_CONFIG = null;
-/* Ejemplo:
-const FIREBASE_CONFIG = {
-  apiKey: "...", authDomain: "...", projectId: "...",
-  storageBucket: "...", messagingSenderId: "...", appId: "..."
+const firebaseConfig = {
+  apiKey: "AIzaSyBefF9NGoQdtbihppLhwzZIeFmg4WTdE0M",
+  authDomain: "presupuesto-china.firebaseapp.com",
+  projectId: "presupuesto-china",
+  storageBucket: "presupuesto-china.firebasestorage.app",
+  messagingSenderId: "749704395141",
+  appId: "1:749704395141:web:f50ce3818ea4345aca2cec"
 };
-*/
 
 const USERS = ['Sofi', 'Mamá', 'Papá'];
 const CATS = [
