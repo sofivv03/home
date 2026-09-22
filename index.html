@@ -13,6 +13,7 @@
   --good:#1D7A52; --good-bg:#E3F1E9; --bad:#B3243A; --bad-bg:#F8E4E7; --focus:#3F72AF;
   --comida:#D9A21B; --transporte:#3F72AF; --servicios:#8B6BB1; --compras:#C4587A;
   --mantenimiento:#3F8F6D; --seguros:#4F5D75; --clases:#C76B3D; --otros:#8A8578;
+  --jardin:#6B9B37; --propiedades:#7A5C3E;
   --display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
   --body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
@@ -224,6 +225,8 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
         <label class="opt"><input type="radio" name="category" value="seguros"><span>Seguros</span></label>
         <label class="opt"><input type="radio" name="category" value="clases"><span>Clases</span></label>
         <label class="opt"><input type="radio" name="category" value="otros"><span>Otros</span></label>
+        <label class="opt"><input type="radio" name="category" value="jardin"><span>Jardín</span></label>
+        <label class="opt"><input type="radio" name="category" value="propiedades"><span>Propiedades</span></label>
       </div>
     </fieldset>
     <fieldset class="field" id="personField" hidden>
@@ -308,7 +311,9 @@ const CATS = [
   { id: 'mantenimiento', name: 'Mantenimiento' },
   { id: 'seguros',       name: 'Seguros' },
   { id: 'clases',        name: 'Clases' },
-  { id: 'otros',         name: 'Otros' }
+  { id: 'otros',         name: 'Otros' },
+  { id: 'jardin',        name: 'Jardín' },
+  { id: 'propiedades',   name: 'Propiedades' }
 ];
 const CAT_NAME = Object.fromEntries(CATS.map(c => [c.id, c.name]));
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
