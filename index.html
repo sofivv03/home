@@ -14,7 +14,7 @@
   --comida:#D9A21B; --transporte:#3F72AF; --servicios:#8B6BB1; --compras:#C4587A;
   --mantenimiento:#3F8F6D; --seguros:#4F5D75; --clases:#C76B3D; --otros:#8A8578;
   --jardin:#6B9B37; --comidafuera:#E08A3D; --mant_moncha:#2E8C8C; --mant_rafi:#6B4F9E;
-  --san_vicente:#9C5B3C; --la_palmera:#B08642;
+  --san_vicente:#9C5B3C; --la_palmera:#B08642; --medicos:#A83250;
   --display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
   --body:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
 }
@@ -245,6 +245,7 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
         <label class="opt"><input type="radio" name="category" value="san_vicente"><span>San Vicente</span></label>
         <label class="opt"><input type="radio" name="category" value="la_palmera"><span>La Palmera</span></label>
         <label class="opt"><input type="radio" name="category" value="seguros"><span>Seguros</span></label>
+        <label class="opt"><input type="radio" name="category" value="medicos"><span>Gastos Médicos</span></label>
         <label class="opt"><input type="radio" name="category" value="clases"><span>Clases</span></label>
         <label class="opt"><input type="radio" name="category" value="compras"><span>Compras</span></label>
         <label class="opt"><input type="radio" name="category" value="otros"><span>Otros</span></label>
@@ -283,6 +284,22 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
     <div class="dlg-actions">
       <button type="button" class="btn-ghost" data-act="close">Cancelar</button>
       <button type="submit" class="btn">Guardar límites</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Fondo anual -->
+<dialog id="dlgFund" aria-labelledby="dlgFundTitle">
+  <h2 id="dlgFundTitle">Fondo total</h2>
+  <form id="formFund">
+    <div class="field">
+      <label for="fundAmount">Monto total (₡)</label>
+      <input id="fundAmount" type="number" name="fund" min="1" step="any" inputmode="decimal" required>
+      <p id="fundHint" class="hint"></p>
+    </div>
+    <div class="dlg-actions">
+      <button type="button" class="btn-ghost" data-act="close">Cancelar</button>
+      <button type="submit" class="btn">Guardar fondo</button>
     </div>
   </form>
 </dialog>
@@ -336,6 +353,7 @@ const CATS = [
   { id: 'san_vicente',   name: 'San Vicente' },
   { id: 'la_palmera',    name: 'La Palmera' },
   { id: 'seguros',       name: 'Seguros' },
+  { id: 'medicos',       name: 'Gastos Médicos' },
   { id: 'clases',        name: 'Clases' },
   { id: 'compras',       name: 'Compras' },
   { id: 'otros',         name: 'Otros' }
@@ -376,7 +394,7 @@ const normLimit = raw => {
 
 /* ---------- Estado ---------- */
 const S = {
-  expenses: [], limits: {}, rate: null, loaded: false,
+  expenses: [], limits: {}, rate: null, fund: null, loaded: false,
   ym: todayYM(), view: 'mes', year: +todayYM().slice(0, 4),
   cat: 'todas', person: 'todas', order: 'desc',
   me: USERS.includes(lsGet('hogar_me')) ? lsGet('hogar_me') : null,
@@ -389,9 +407,9 @@ let deletingId = null;
 /* ---------- Almacenamiento ---------- */
 function localStore(onData) {
   const KEY = 'hogar_local_v1';
-  let d = { expenses: [], limits: {}, rate: null };
-  try { const raw = lsGet(KEY); if (raw) d = { expenses: [], limits: {}, rate: null, ...JSON.parse(raw) }; } catch { /* datos dañados */ }
-  const notify = () => onData({ expenses: [...d.expenses], limits: { ...d.limits }, rate: d.rate, loaded: true });
+  let d = { expenses: [], limits: {}, rate: null, fund: null };
+  try { const raw = lsGet(KEY); if (raw) d = { expenses: [], limits: {}, rate: null, fund: null, ...JSON.parse(raw) }; } catch { /* datos dañados */ }
+  const notify = () => onData({ expenses: [...d.expenses], limits: { ...d.limits }, rate: d.rate, fund: d.fund, loaded: true });
   const save = () => { lsSet(KEY, JSON.stringify(d)); notify(); };
   notify();
   return {
@@ -406,7 +424,8 @@ function localStore(onData) {
       d.limits[ym] = { total: cur.total, cat };
       save();
     },
-    setRate: async v => { d.rate = v; save(); }
+    setRate: async v => { d.rate = v; save(); },
+    setFund: async v => { d.fund = v; save(); }
   };
 }
 
@@ -420,8 +439,8 @@ async function firebaseStore(onData) {
   const db = fsM.getFirestore(app);
   const col = fsM.collection(db, 'hogar_gastos');
   const limRef = fsM.doc(db, 'hogar_ajustes', 'limites');
-  const data = { expenses: [], limits: {}, rate: null, loaded: false };
-  const push = () => onData({ expenses: data.expenses, limits: data.limits, rate: data.rate, loaded: data.loaded });
+  const data = { expenses: [], limits: {}, rate: null, fund: null, loaded: false };
+  const push = () => onData({ expenses: data.expenses, limits: data.limits, rate: data.rate, fund: data.fund, loaded: data.loaded });
   fsM.onSnapshot(col, snap => {
     data.expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     data.loaded = true;
@@ -432,6 +451,7 @@ async function firebaseStore(onData) {
     const docData = snap.exists() ? snap.data() : {};
     data.limits = docData.limits || {};
     data.rate = docData.rate ?? null;
+    data.fund = docData.fund ?? null;
     push();
   }, err => { console.error(err); setStatus('error'); });
   return {
@@ -442,7 +462,8 @@ async function firebaseStore(onData) {
     setCatLimit: (ym, catId, v) => fsM.setDoc(limRef, {
       limits: { [ym]: { cat: { [catId]: v == null ? fsM.deleteField() : v } } }
     }, { merge: true }),
-    setRate: v => fsM.setDoc(limRef, { rate: v }, { merge: true })
+    setRate: v => fsM.setDoc(limRef, { rate: v }, { merge: true }),
+    setFund: v => fsM.setDoc(limRef, { fund: v }, { merge: true })
   };
 }
 
@@ -450,6 +471,7 @@ function onData(d) {
   S.expenses = d.expenses;
   S.limits = d.limits;
   S.rate = d.rate;
+  S.fund = d.fund;
   S.loaded = d.loaded;
   render();
 }
@@ -506,6 +528,7 @@ function findLimit(ym, getter) {
 }
 const limitFor = ym => findLimit(ym, l => l.total);
 const catLimitFor = (ym, catId) => findLimit(ym, l => l.cat[catId]);
+const totalFund = () => (S.fund != null) ? +S.fund : null;
 
 /* ---------- Iconos ---------- */
 const ICON_EDIT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
@@ -728,6 +751,42 @@ function niceScale(max) {
   return { top, ticks };
 }
 
+function renderFund() {
+  const F = totalFund();
+  const totalSpent = S.expenses.reduce((s, e) => s + (+e.amount || 0), 0);
+  if (!F) {
+    return `<section class="hero" style="margin-bottom:20px">
+      <p class="hero-label">Fondo total</p>
+      <p class="hero-big">${fmtMoney(0)}</p>
+      <p class="hero-empty">Define el monto total con el que cuentan. Cada gasto que registres, en cualquier mes o año, se va restando de este fondo, para ver cuánto queda disponible.</p>
+      <p style="margin-top:14px"><button class="btn" data-act="fund">Definir fondo total</button></p>
+    </section>`;
+  }
+  const remaining = F - totalSpent;
+  const over = remaining < 0;
+  const pct = Math.round(totalSpent / F * 100);
+  const scale = Math.max(F, totalSpent, 1);
+  return `<section class="hero" style="margin-bottom:20px">
+    <div class="hero-top">
+      <div>
+        <p class="hero-label">${over ? 'Se sobrepasó el fondo total por' : 'Queda del fondo total'}</p>
+        <p class="hero-big ${over ? 'bad' : 'good'}">${fmtMoney(Math.abs(remaining))}</p>
+      </div>
+      <button class="btn-ghost" data-act="fund">Editar fondo</button>
+    </div>
+    <div class="gauge-wrap">
+      <div class="gauge" role="img" aria-label="Gastado ${fmtMoney(totalSpent)} de un fondo de ${fmtMoney(F)}">
+        <span class="seg" style="width:${Math.min(totalSpent / scale * 100, 100)}%;background:${over ? 'var(--bad)' : 'var(--ink)'}"></span>
+      </div>
+    </div>
+    <div class="meta">
+      <span><strong>${fmtMoney(totalSpent)}</strong> gastado en total</span>
+      <span>Fondo <strong>${fmtMoney(F)}</strong></span>
+      <span><strong>${pct}%</strong> usado</span>
+    </div>
+  </section>`;
+}
+
 function renderYear() {
   const rows = [];
   let spentYear = 0, net = 0, closed = 0, under = 0, over = 0;
@@ -795,7 +854,7 @@ function renderYear() {
   else { netTxt = `${fmtMoney(-net)} sobrepasados`; netCls = 'bad'; }
   const monthsTxt = closed ? `${under} ${under === 1 ? 'ahorrado' : 'ahorrados'}, ${over} ${over === 1 ? 'sobrepasado' : 'sobrepasados'}` : 'Aún no hay datos';
 
-  return `
+  return renderFund() + `
     <section class="strip">
       <div><span class="k">Gastado en ${S.year}</span><span class="v">${fmtMoney(spentYear)}</span></div>
       <div><span class="k">Balance de los meses cerrados</span><span class="v ${netCls}">${netTxt}</span></div>
@@ -946,6 +1005,27 @@ async function saveLimit(ev) {
   }
 }
 
+function openFund() {
+  const F = totalFund();
+  $('#fundAmount').value = F || '';
+  $('#fundHint').textContent = 'Es un solo monto total, no por año. Cada gasto que registres se va descontando de aquí, sin importar el mes o el año.';
+  $('#dlgFund').showModal();
+}
+
+async function saveFund(ev) {
+  ev.preventDefault();
+  const v = parseFloat($('#fundAmount').value);
+  if (!(v > 0)) return;
+  try {
+    await store.setFund(v);
+    $('#dlgFund').close();
+    toast('Fondo guardado');
+  } catch (err) {
+    console.error(err);
+    toast('No se pudo guardar el fondo');
+  }
+}
+
 function openDelete(id) {
   const e = S.expenses.find(x => x.id === id);
   if (!e) return;
@@ -994,6 +1074,7 @@ document.addEventListener('click', ev => {
     case 'del': openDelete(el.dataset.id); break;
     case 'confirm-del': confirmDelete(); break;
     case 'limit': openLimit(); break;
+    case 'fund': openFund(); break;
     case 'who': $('#dlgWho').showModal(); break;
     case 'who-pick':
       S.me = el.dataset.v; lsSet('hogar_me', S.me);
@@ -1005,6 +1086,7 @@ document.addEventListener('click', ev => {
 $('#formExpense').addEventListener('submit', saveExpense);
 $('#formExpense').addEventListener('change', onExpenseFormChange);
 $('#formLimit').addEventListener('submit', saveLimit);
+$('#formFund').addEventListener('submit', saveFund);
 
 /* ---------- Inicio ---------- */
 render();
