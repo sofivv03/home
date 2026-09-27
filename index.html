@@ -167,6 +167,10 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 .cat-limit-row{display:grid;grid-template-columns:1fr 120px;gap:10px;align-items:center}
 .cat-limit-row label{display:flex;align-items:center;gap:8px;font-weight:500;font-size:.92rem}
 .cat-limit-row input{width:100%;font:inherit;padding:8px 10px;border:1px solid #BFCBC3;border-radius:8px;background:#fff;color:var(--ink)}
+.ahorro-input{width:100%;min-width:96px;font:inherit;padding:6px 8px;border:1px solid #BFCBC3;border-radius:8px;background:#fff;color:var(--ink);text-align:right}
+table.ahorro-table{min-width:640px}
+table.ahorro-year{min-width:900px}
+tfoot td{border-top:2px solid var(--line);font-weight:600}
 
 @media (max-width:520px){.hero{padding:20px 18px 16px}.fab{left:16px;right:16px;text-align:center}.cat-limit-row{grid-template-columns:1fr 96px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -193,6 +197,7 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
     <nav class="tabs" aria-label="Vista">
       <button data-act="tab" data-v="mes">Mes</button>
       <button data-act="tab" data-v="anio">Año</button>
+      <button data-act="tab" data-v="ahorro">Ahorro</button>
     </nav>
     <div id="period" class="period"></div>
   </div>
@@ -289,17 +294,18 @@ dialog h2{font:700 1.35rem/1.2 var(--display);margin-bottom:14px}
 </dialog>
 
 <!-- Fondo anual -->
-<dialog id="dlgFund" aria-labelledby="dlgFundTitle">
-  <h2 id="dlgFundTitle">Fondo total</h2>
-  <form id="formFund">
+<!-- Saldo inicial de Cuenta Corriente ₡ -->
+<dialog id="dlgCta" aria-labelledby="dlgCtaTitle">
+  <h2 id="dlgCtaTitle">Saldo inicial · Cuenta Corriente ₡</h2>
+  <form id="formCta">
     <div class="field">
-      <label for="fundAmount">Monto total (₡)</label>
-      <input id="fundAmount" type="number" name="fund" min="1" step="any" inputmode="decimal" required>
-      <p id="fundHint" class="hint"></p>
+      <label for="ctaAmount">Saldo inicial (₡)</label>
+      <input id="ctaAmount" type="number" min="0" step="any" inputmode="decimal" required>
+      <p class="hint">Se ingresa una sola vez. Cada gasto que registres en Mes o Año se va restando de aquí automáticamente, sin importar la fecha.</p>
     </div>
     <div class="dlg-actions">
       <button type="button" class="btn-ghost" data-act="close">Cancelar</button>
-      <button type="submit" class="btn">Guardar fondo</button>
+      <button type="submit" class="btn">Guardar saldo inicial</button>
     </div>
   </form>
 </dialog>
@@ -359,6 +365,20 @@ const CATS = [
   { id: 'otros',         name: 'Otros' }
 ];
 const CAT_NAME = Object.fromEntries(CATS.map(c => [c.id, c.name]));
+const SAVINGS_CATS = [
+  { id: 'cta_crc',           name: 'Cuenta Corriente',                 currency: 'CRC', auto: true },
+  { id: 'cta_usd',           name: 'Cuenta Corriente',                 currency: 'USD' },
+  { id: 'fi_usd',            name: 'Fondo de Inversión',               currency: 'USD' },
+  { id: 'fi_interes_usd',    name: 'Interés de FI',                    currency: 'USD' },
+  { id: 'cdp_crc',           name: 'Certificado Depósito a Plazos',    currency: 'CRC' },
+  { id: 'cdp_interes_crc',   name: 'Interés de CDP',                   currency: 'CRC' },
+  { id: 'cdp_usd',           name: 'Certificado Depósito a Plazos',    currency: 'USD' },
+  { id: 'cdp_interes_usd',   name: 'Interés de CDP',                   currency: 'USD' },
+  { id: 'vista_crc',         name: 'Certificado a la vista',           currency: 'CRC' },
+  { id: 'vista_interes_crc', name: 'Interés a la vista',               currency: 'CRC' },
+  { id: 'vista_usd',         name: 'Certificado a la vista',           currency: 'USD' },
+  { id: 'vista_interes_usd', name: 'Interés a la vista',               currency: 'USD' }
+];
 const MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const MON_SHORT = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
 const DOW = ['dom','lun','mar','mié','jue','vie','sáb'];
@@ -394,9 +414,10 @@ const normLimit = raw => {
 
 /* ---------- Estado ---------- */
 const S = {
-  expenses: [], limits: {}, rate: null, fund: null, loaded: false,
+  expenses: [], limits: {}, rate: null, ctaInicial: null, savings: {}, loaded: false,
   ym: todayYM(), view: 'mes', year: +todayYM().slice(0, 4),
   cat: 'todas', person: 'todas', order: 'desc',
+  fondoYm: todayYM(), fondoYear: +todayYM().slice(0, 4), fondoSubView: 'mes',
   me: USERS.includes(lsGet('hogar_me')) ? lsGet('hogar_me') : null,
   status: 'connecting', mode: 'local'
 };
@@ -407,9 +428,9 @@ let deletingId = null;
 /* ---------- Almacenamiento ---------- */
 function localStore(onData) {
   const KEY = 'hogar_local_v1';
-  let d = { expenses: [], limits: {}, rate: null, fund: null };
-  try { const raw = lsGet(KEY); if (raw) d = { expenses: [], limits: {}, rate: null, fund: null, ...JSON.parse(raw) }; } catch { /* datos dañados */ }
-  const notify = () => onData({ expenses: [...d.expenses], limits: { ...d.limits }, rate: d.rate, fund: d.fund, loaded: true });
+  let d = { expenses: [], limits: {}, rate: null, ctaInicial: null, savings: {} };
+  try { const raw = lsGet(KEY); if (raw) d = { expenses: [], limits: {}, rate: null, ctaInicial: null, savings: {}, ...JSON.parse(raw) }; } catch { /* datos dañados */ }
+  const notify = () => onData({ expenses: [...d.expenses], limits: { ...d.limits }, rate: d.rate, ctaInicial: d.ctaInicial, savings: { ...d.savings }, loaded: true });
   const save = () => { lsSet(KEY, JSON.stringify(d)); notify(); };
   notify();
   return {
@@ -425,7 +446,15 @@ function localStore(onData) {
       save();
     },
     setRate: async v => { d.rate = v; save(); },
-    setFund: async v => { d.fund = v; save(); }
+    setFund: async v => { d.ctaInicial = v; save(); },
+    setSaving: async (ym, catId, field, v) => {
+      const cur = { ...(d.savings[ym] || {}) };
+      const catCur = { ...(cur[catId] || { saray: 0, victor: 0 }) };
+      catCur[field] = v;
+      cur[catId] = catCur;
+      d.savings = { ...d.savings, [ym]: cur };
+      save();
+    }
   };
 }
 
@@ -439,8 +468,8 @@ async function firebaseStore(onData) {
   const db = fsM.getFirestore(app);
   const col = fsM.collection(db, 'hogar_gastos');
   const limRef = fsM.doc(db, 'hogar_ajustes', 'limites');
-  const data = { expenses: [], limits: {}, rate: null, fund: null, loaded: false };
-  const push = () => onData({ expenses: data.expenses, limits: data.limits, rate: data.rate, fund: data.fund, loaded: data.loaded });
+  const data = { expenses: [], limits: {}, rate: null, ctaInicial: null, savings: {}, loaded: false };
+  const push = () => onData({ expenses: data.expenses, limits: data.limits, rate: data.rate, ctaInicial: data.ctaInicial, savings: data.savings, loaded: data.loaded });
   fsM.onSnapshot(col, snap => {
     data.expenses = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     data.loaded = true;
@@ -451,7 +480,9 @@ async function firebaseStore(onData) {
     const docData = snap.exists() ? snap.data() : {};
     data.limits = docData.limits || {};
     data.rate = docData.rate ?? null;
-    data.fund = docData.fund ?? null;
+    data.fund = undefined;
+    data.ctaInicial = docData.ctaInicial ?? null;
+    data.savings = docData.savings || {};
     push();
   }, err => { console.error(err); setStatus('error'); });
   return {
@@ -463,7 +494,10 @@ async function firebaseStore(onData) {
       limits: { [ym]: { cat: { [catId]: v == null ? fsM.deleteField() : v } } }
     }, { merge: true }),
     setRate: v => fsM.setDoc(limRef, { rate: v }, { merge: true }),
-    setFund: v => fsM.setDoc(limRef, { fund: v }, { merge: true })
+    setFund: v => fsM.setDoc(limRef, { ctaInicial: v }, { merge: true }),
+    setSaving: (ym, catId, field, v) => fsM.setDoc(limRef, {
+      savings: { [ym]: { [catId]: { [field]: v } } }
+    }, { merge: true })
   };
 }
 
@@ -471,7 +505,8 @@ function onData(d) {
   S.expenses = d.expenses;
   S.limits = d.limits;
   S.rate = d.rate;
-  S.fund = d.fund;
+  S.ctaInicial = d.ctaInicial;
+  S.savings = d.savings || {};
   S.loaded = d.loaded;
   render();
 }
@@ -528,7 +563,17 @@ function findLimit(ym, getter) {
 }
 const limitFor = ym => findLimit(ym, l => l.total);
 const catLimitFor = (ym, catId) => findLimit(ym, l => l.cat[catId]);
-const totalFund = () => (S.fund != null) ? +S.fund : null;
+const ctaBalance = ym => {
+  if (S.ctaInicial == null) return null;
+  const spent = S.expenses
+    .filter(e => e.date && e.date.slice(0, 7) <= ym)
+    .reduce((s, e) => s + (+e.amount || 0), 0);
+  return +S.ctaInicial - spent;
+};
+const ahorroFor = (ym, catId) => {
+  const m = S.savings[ym] && S.savings[ym][catId];
+  return m ? { saray: +m.saray || 0, victor: +m.victor || 0 } : { saray: 0, victor: 0 };
+};
 
 /* ---------- Iconos ---------- */
 const ICON_EDIT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
@@ -569,10 +614,20 @@ function renderPeriod() {
       <button class="nav-btn" data-act="prev" aria-label="Mes anterior">‹</button>
       <h2>${esc(monthName(S.ym))}</h2>
       <button class="nav-btn" data-act="next" aria-label="Mes siguiente">›</button>`;
-  } else {
+  } else if (S.view === 'anio') {
     $('#period').innerHTML = `
       <button class="nav-btn" data-act="prev" aria-label="Año anterior">‹</button>
       <h2>${S.year}</h2>
+      <button class="nav-btn" data-act="next" aria-label="Año siguiente">›</button>`;
+  } else if (S.fondoSubView === 'mes') {
+    $('#period').innerHTML = `
+      <button class="nav-btn" data-act="prev" aria-label="Mes anterior">‹</button>
+      <h2>${esc(monthName(S.fondoYm))}</h2>
+      <button class="nav-btn" data-act="next" aria-label="Mes siguiente">›</button>`;
+  } else {
+    $('#period').innerHTML = `
+      <button class="nav-btn" data-act="prev" aria-label="Año anterior">‹</button>
+      <h2>${S.fondoYear}</h2>
       <button class="nav-btn" data-act="next" aria-label="Año siguiente">›</button>`;
   }
 }
@@ -580,7 +635,7 @@ function renderPeriod() {
 function render() {
   renderChrome();
   renderPeriod();
-  $('#app').innerHTML = S.view === 'mes' ? renderMonth() : renderYear();
+  $('#app').innerHTML = S.view === 'mes' ? renderMonth() : S.view === 'anio' ? renderYear() : renderAhorro();
 }
 
 /* ---------- Render: vista mensual ---------- */
@@ -738,6 +793,92 @@ function renderMonth() {
   return renderHero(t, L, phaseOf(S.ym)) + `<div class="cols">${renderList(t)}${renderCats(t)}</div>` + compares;
 }
 
+/* ---------- Render: fondo de ahorro ---------- */
+function renderAhorro() {
+  const toggle = `<div class="filters" style="margin-bottom:16px">
+    <button class="chip" data-act="fondoview" data-v="mes" aria-pressed="${S.fondoSubView === 'mes'}">Mes actual</button>
+    <button class="chip" data-act="fondoview" data-v="anio" aria-pressed="${S.fondoSubView === 'anio'}">Ver todos los meses</button>
+  </div>`;
+  return `<section class="card">
+    <h2>Fondo de ahorro</h2>
+    ${toggle}
+    ${S.fondoSubView === 'mes' ? renderAhorroMes() : renderAhorroAnio()}
+  </section>`;
+}
+
+function renderAhorroMes() {
+  const ym = S.fondoYm;
+  let sarayCRC = 0, victorCRC = 0, totalCRC = 0, sarayUSD = 0, victorUSD = 0, totalUSD = 0;
+  const rows = SAVINGS_CATS.map(c => {
+    const symbol = c.currency === 'CRC' ? '₡' : '$';
+    const fmt = c.currency === 'CRC' ? fmtMoney : fmtUsd;
+    if (c.auto) {
+      const bal = ctaBalance(ym);
+      if (bal != null) totalCRC += bal;
+      return `<tr>
+        <td>${c.name} <span class="tag">${symbol}</span></td>
+        <td>—</td><td>—</td>
+        <td><button class="link" data-act="ctaInicial">${bal == null ? 'Definir saldo inicial' : fmtMoney(bal)}</button></td>
+      </tr>`;
+    }
+    const v = ahorroFor(ym, c.id);
+    const total = v.saray + v.victor;
+    if (c.currency === 'CRC') { sarayCRC += v.saray; victorCRC += v.victor; totalCRC += total; }
+    else { sarayUSD += v.saray; victorUSD += v.victor; totalUSD += total; }
+    return `<tr>
+      <td>${c.name} <span class="tag">${symbol}</span></td>
+      <td><input type="number" step="any" class="ahorro-input" data-cat="${c.id}" data-field="saray" value="${v.saray || ''}"></td>
+      <td><input type="number" step="any" class="ahorro-input" data-cat="${c.id}" data-field="victor" value="${v.victor || ''}"></td>
+      <td>${fmt(total)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="table-wrap"><table class="ahorro-table">
+    <thead><tr><th>Categoría</th><th>Saray</th><th>Victor</th><th>Total</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr><td>Total colones</td><td>${fmtMoney(sarayCRC)}</td><td>${fmtMoney(victorCRC)}</td><td>${fmtMoney(totalCRC)}</td></tr>
+      <tr><td>Total dólares</td><td>${fmtUsd(sarayUSD)}</td><td>${fmtUsd(victorUSD)}</td><td>${fmtUsd(totalUSD)}</td></tr>
+    </tfoot>
+  </table></div>`;
+}
+
+function renderAhorroAnio() {
+  const year = S.fondoYear;
+  const rows = SAVINGS_CATS.map(c => {
+    const symbol = c.currency === 'CRC' ? '₡' : '$';
+    const cells = [];
+    for (let m = 1; m <= 12; m++) {
+      const ym = `${year}-${pad(m)}`;
+      let total;
+      if (c.auto) total = ctaBalance(ym);
+      else { const v = ahorroFor(ym, c.id); total = v.saray + v.victor; }
+      cells.push(`<td>${total ? fmtCompact(total) : '—'}</td>`);
+    }
+    return `<tr><td>${c.name} <span class="tag">${symbol}</span></td>${cells.join('')}</tr>`;
+  }).join('');
+  const totalsCRC = [], totalsUSD = [];
+  for (let m = 1; m <= 12; m++) {
+    const ym = `${year}-${pad(m)}`;
+    let tCRC = 0, tUSD = 0;
+    SAVINGS_CATS.forEach(c => {
+      let total;
+      if (c.auto) total = ctaBalance(ym) || 0;
+      else { const v = ahorroFor(ym, c.id); total = v.saray + v.victor; }
+      if (c.currency === 'CRC') tCRC += total; else tUSD += total;
+    });
+    totalsCRC.push(`<td>${fmtCompact(tCRC)}</td>`);
+    totalsUSD.push(`<td>${fmtCompact(tUSD)}</td>`);
+  }
+  return `<div class="table-wrap"><table class="ahorro-year">
+    <thead><tr><th>Categoría</th>${MON_SHORT.map(m => `<th>${m}</th>`).join('')}</tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr><td>Total ₡</td>${totalsCRC.join('')}</tr>
+      <tr><td>Total $</td>${totalsUSD.join('')}</tr>
+    </tfoot>
+  </table></div>`;
+}
+
 /* ---------- Render: vista anual ---------- */
 function niceScale(max) {
   if (max <= 0) return { top: 1, ticks: [0, 1] };
@@ -749,42 +890,6 @@ function niceScale(max) {
   const ticks = [];
   for (let v = 0; v <= top + step / 1000; v += step) ticks.push(v);
   return { top, ticks };
-}
-
-function renderFund() {
-  const F = totalFund();
-  const totalSpent = S.expenses.reduce((s, e) => s + (+e.amount || 0), 0);
-  if (!F) {
-    return `<section class="hero" style="margin-bottom:20px">
-      <p class="hero-label">Fondo total</p>
-      <p class="hero-big">${fmtMoney(0)}</p>
-      <p class="hero-empty">Define el monto total con el que cuentan. Cada gasto que registres, en cualquier mes o año, se va restando de este fondo, para ver cuánto queda disponible.</p>
-      <p style="margin-top:14px"><button class="btn" data-act="fund">Definir fondo total</button></p>
-    </section>`;
-  }
-  const remaining = F - totalSpent;
-  const over = remaining < 0;
-  const pct = Math.round(totalSpent / F * 100);
-  const scale = Math.max(F, totalSpent, 1);
-  return `<section class="hero" style="margin-bottom:20px">
-    <div class="hero-top">
-      <div>
-        <p class="hero-label">${over ? 'Se sobrepasó el fondo total por' : 'Queda del fondo total'}</p>
-        <p class="hero-big ${over ? 'bad' : 'good'}">${fmtMoney(Math.abs(remaining))}</p>
-      </div>
-      <button class="btn-ghost" data-act="fund">Editar fondo</button>
-    </div>
-    <div class="gauge-wrap">
-      <div class="gauge" role="img" aria-label="Gastado ${fmtMoney(totalSpent)} de un fondo de ${fmtMoney(F)}">
-        <span class="seg" style="width:${Math.min(totalSpent / scale * 100, 100)}%;background:${over ? 'var(--bad)' : 'var(--ink)'}"></span>
-      </div>
-    </div>
-    <div class="meta">
-      <span><strong>${fmtMoney(totalSpent)}</strong> gastado en total</span>
-      <span>Fondo <strong>${fmtMoney(F)}</strong></span>
-      <span><strong>${pct}%</strong> usado</span>
-    </div>
-  </section>`;
 }
 
 function renderYear() {
@@ -854,7 +959,7 @@ function renderYear() {
   else { netTxt = `${fmtMoney(-net)} sobrepasados`; netCls = 'bad'; }
   const monthsTxt = closed ? `${under} ${under === 1 ? 'ahorrado' : 'ahorrados'}, ${over} ${over === 1 ? 'sobrepasado' : 'sobrepasados'}` : 'Aún no hay datos';
 
-  return renderFund() + `
+  return `
     <section class="strip">
       <div><span class="k">Gastado en ${S.year}</span><span class="v">${fmtMoney(spentYear)}</span></div>
       <div><span class="k">Balance de los meses cerrados</span><span class="v ${netCls}">${netTxt}</span></div>
@@ -1005,24 +1110,22 @@ async function saveLimit(ev) {
   }
 }
 
-function openFund() {
-  const F = totalFund();
-  $('#fundAmount').value = F || '';
-  $('#fundHint').textContent = 'Es un solo monto total, no por año. Cada gasto que registres se va descontando de aquí, sin importar el mes o el año.';
-  $('#dlgFund').showModal();
+function openCta() {
+  $('#ctaAmount').value = S.ctaInicial != null ? S.ctaInicial : '';
+  $('#dlgCta').showModal();
 }
 
-async function saveFund(ev) {
+async function saveCta(ev) {
   ev.preventDefault();
-  const v = parseFloat($('#fundAmount').value);
-  if (!(v > 0)) return;
+  const v = parseFloat($('#ctaAmount').value);
+  if (!(v >= 0)) return;
   try {
     await store.setFund(v);
-    $('#dlgFund').close();
-    toast('Fondo guardado');
+    $('#dlgCta').close();
+    toast('Saldo inicial guardado');
   } catch (err) {
     console.error(err);
-    toast('No se pudo guardar el fondo');
+    toast('No se pudo guardar el saldo inicial');
   }
 }
 
@@ -1055,8 +1158,10 @@ document.addEventListener('click', ev => {
   switch (a) {
     case 'prev': case 'next': {
       const d = a === 'prev' ? -1 : 1;
-      if (S.view === 'mes') S.ym = shiftMonth(S.ym, d); else S.year += d;
-      S.cat = 'todas'; S.person = 'todas';
+      if (S.view === 'mes') { S.ym = shiftMonth(S.ym, d); S.cat = 'todas'; S.person = 'todas'; }
+      else if (S.view === 'anio') { S.year += d; }
+      else if (S.fondoSubView === 'mes') { S.fondoYm = shiftMonth(S.fondoYm, d); }
+      else { S.fondoYear += d; }
       render(); break;
     }
     case 'tab':
@@ -1074,7 +1179,8 @@ document.addEventListener('click', ev => {
     case 'del': openDelete(el.dataset.id); break;
     case 'confirm-del': confirmDelete(); break;
     case 'limit': openLimit(); break;
-    case 'fund': openFund(); break;
+    case 'ctaInicial': openCta(); break;
+    case 'fondoview': S.fondoSubView = el.dataset.v; render(); break;
     case 'who': $('#dlgWho').showModal(); break;
     case 'who-pick':
       S.me = el.dataset.v; lsSet('hogar_me', S.me);
@@ -1086,7 +1192,15 @@ document.addEventListener('click', ev => {
 $('#formExpense').addEventListener('submit', saveExpense);
 $('#formExpense').addEventListener('change', onExpenseFormChange);
 $('#formLimit').addEventListener('submit', saveLimit);
-$('#formFund').addEventListener('submit', saveFund);
+$('#formCta').addEventListener('submit', saveCta);
+document.addEventListener('change', ev => {
+  const inp = ev.target.closest('.ahorro-input');
+  if (!inp) return;
+  const v = parseFloat(inp.value) || 0;
+  store.setSaving(S.fondoYm, inp.dataset.cat, inp.dataset.field, v)
+    .then(() => toast('Guardado'))
+    .catch(err => { console.error(err); toast('No se pudo guardar'); });
+});
 
 /* ---------- Inicio ---------- */
 render();
