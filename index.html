@@ -537,14 +537,26 @@ function totals(ym) {
   const list = byMonth(ym);
   const cat = Object.fromEntries(CATS.map(c => [c.id, 0]));
   const per = Object.fromEntries(USERS.map(u => [u, 0]));
-  let total = 0;
+  let total = 0, crcNative = 0, usdNative = 0, usdInCrc = 0;
   for (const e of list) {
     const a = +e.amount || 0;
     total += a;
     if (cat[e.category] !== undefined) cat[e.category] += a;
     if (e.category === 'compras' && per[e.person] !== undefined) per[e.person] += a;
+    if (e.currency === 'USD') { usdNative += (+e.fxAmount || 0); usdInCrc += a; }
+    else { crcNative += a; }
   }
-  return { list, cat, per, total };
+  return { list, cat, per, total, crcNative, usdNative, usdInCrc };
+}
+
+/* Desglose de cuánto del gasto fue registrado directo en colones y cuánto en
+   dólares (con su equivalente en colones), solo si hubo algún gasto en dólares. */
+function renderCurrencyBreakdown(t) {
+  if (!t.usdNative) return '';
+  return `<div class="meta" style="margin-top:6px">
+    <span><strong>${fmtMoney(t.crcNative)}</strong> registrado directo en colones</span>
+    <span><strong>${fmtUsd(t.usdNative)}</strong> registrado en dólares (≈ ${fmtMoney(t.usdInCrc)})</span>
+  </div>`;
 }
 
 /* Busca un valor de límite (total o de una categoría) para ym; si ese mes
@@ -645,6 +657,7 @@ function renderHero(t, L, phase) {
       <p class="hero-label">Gastado en ${esc(monthName(S.ym))}</p>
       <p class="hero-big">${fmtMoney(t.total)}</p>
       <p class="hero-empty">Todavía no hay un límite mensual. Define uno para ver cuánto se ahorra o se sobrepasa cada mes.</p>
+      ${renderCurrencyBreakdown(t)}
       <p style="margin-top:14px"><button class="btn" data-act="limit">Definir límite mensual</button></p>
     </section>`;
   }
@@ -672,6 +685,7 @@ function renderHero(t, L, phase) {
       <span>Límite <strong>${fmtMoney(L.value)}</strong>${L.inherited ? ' (mismo del último mes definido)' : ''}</span>
       <span><strong>${pct}%</strong> del límite</span>
     </div>
+    ${renderCurrencyBreakdown(t)}
   </section>`;
 }
 
